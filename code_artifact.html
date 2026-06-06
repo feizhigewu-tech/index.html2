@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>理科の教科書風カードジェネレーター - フルカスタム版</title>
+    <!-- Tailwind CSS & Google Fonts & FontAwesome -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- 教科書調のフォントや丸ゴシック、手書き風など、カードの個性を出せるフォントを追加ロード -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&family=Noto+Sans+JP:wght@400;700&family=BIZ+UDPMincho:wght@400;700&family=BIZ+UDPGothic:wght@400;700&family=Kiwi+Maru:wght@400;500&family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- html2canvas for high-res PNG export -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #f1f5f9;
+        }
+        
+        /* 羊皮紙・古書テクスチャの再現 */
+        .parchment-bg {
+            background-color: #faf5eb;
+            position: relative;
+        }
+        .parchment-bg::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: 
+                radial-gradient(rgba(128, 13, 35, 0.01) 1.5px, transparent 1.5px),
+                linear-gradient(rgba(0,0,0,0.02) 1px, transparent 1px);
+            background-size: 24px 24px, 100% 4px;
+            pointer-events: none;
+            opacity: 0.8;
+            z-index: 1;
+        }
+
+        /* 3Dボタン・バッジ風エフェクト */
+        .badge-3d {
+            box-shadow: 
+                inset -3px -3px 6px rgba(0, 0, 0, 0.4),
+                inset 3px 3px 6px rgba(255, 255, 255, 0.3),
+                0 6px 12px rgba(0, 0, 0, 0.25);
+            border: 2px solid #e2e8f0;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+
+        /* 3D金属製星マーク */
+        .star-3d {
+            filter: drop-shadow(0px 3px 4px rgba(0,0,0,0.3));
+            background: linear-gradient(135deg, #ffe066 0%, #f5b041 50%, #b7950b 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* 印刷/保存用の枠サイズ制限 (標準TCGアスペクト比 63mm x 88mm ≒ 1:1.4) */
+        #card-preview-area {
+            width: 450px;
+            height: 630px;
+            min-width: 450px;
+            min-height: 630px;
+            position: relative;
+            box-shadow: 0 20px 45px rgba(0,0,0,0.15);
+            overflow: hidden;
+        }
+
+        /* 背景微細パターン (学術ノートの罫線) */
+        .scientific-grid {
+            background-image: linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+            background-size: 100% 18px;
+        }
+    </style>
+</head>
+<body class="p-6 md:p-12">
+
+    <!-- アプリ全体のコンテナ -->
+    <div class="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
+        
+        <!-- ヘッダー -->
+        <div class="bg-gradient-to-r from-emerald-800 to-teal-900 p-6 text-white flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold flex items-center gap-3" style="font-family: 'Noto Serif JP', serif;">
+                    <i class="fa-solid fa-vial-circle-check text-yellow-400"></i>
+                    理科の教科書風カードジェネレーター (フルカスタム版)
+                </h1>
+                <p class="text-emerald-200 text-sm mt-1">
+                    文字や写真をアップするだけでプロ顔負けのゲームカードが作れるぴよ！すべての項目を自由に入力・編集可能になったぴよ🐤
+                </p>
+            </div>
+            <span class="bg-yellow-400 text-slate-900 px-4 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center gap-1.5">
+                <i class="fa-solid fa-egg animate-bounce"></i> ぴよちゃん公認ツール
+            </span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 p-8 bg-slate-50">
+            
+            <!-- 左側：操作パネル（40%幅） -->
+            <div class="lg:col-span-5 bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6 max-h-[85vh] overflow-y-auto">
+                
+                <!-- 1. プリセット切り替え -->
+                <div>
+                    <label class="block text-slate-700 font-bold mb-2 text-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-wand-magic-sparkles text-indigo-500"></i> カードタイプを選択
+                    </label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="setPreset('pathogen')" class="px-3 py-2.5 rounded-lg border-2 border-rose-600 bg-rose-50 text-rose-800 font-bold text-xs flex flex-col items-center gap-1 shadow-sm transition hover:scale-105">
+                            <span class="w-5 h-5 rounded-full bg-rose-700 text-white flex items-center justify-center text-[10px]">病</span>
+                            病原菌（赤）
+                        </button>
+                        <button onclick="setPreset('plant')" class="px-3 py-2.5 rounded-lg border-2 border-emerald-600 bg-emerald-50 text-emerald-800 font-bold text-xs flex flex-col items-center gap-1 shadow-sm transition hover:scale-105">
+                            <span class="w-5 h-5 rounded-full bg-emerald-700 text-white flex items-center justify-center text-[10px]">植</span>
+                            植物（緑）
+                        </button>
+                        <button onclick="setPreset('support')" class="px-3 py-2.5 rounded-lg border-2 border-blue-600 bg-blue-50 text-blue-800 font-bold text-xs flex flex-col items-center gap-1 shadow-sm transition hover:scale-105">
+                            <span class="w-5 h-5 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px]">サ</span>
+                            環境（青）
+                        </button>
+                    </div>
+                </div>
+
+                <hr class="border-slate-100">
+
+                <!-- 2. 【新規追加】カード情報の入力・編集フォーム -->
+                <div class="space-y-4">
+                    <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 border-b pb-2">
+                        <i class="fa-solid fa-pen-to-square text-emerald-600"></i> カード内容の編集
+                    </h3>
+                    
+                    <!-- カード名 & 英語名 -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-slate-600 font-semibold mb-1 text-[11px]">カード名</label>
+                            <input type="text" id="input-name" oninput="updateCard()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-slate-600 font-semibold mb-1 text-[11px]">英語・学名</label>
+                            <input type="text" id="input-sub" oninput="updateCard()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                    </div>
+
+                    <!-- レア度 & カード番号 -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-slate-600 font-semibold mb-1 text-[11px]">レア度（星の数 1-5）</label>
+                            <input type="number" id="input-stars" min="1" max="5" value="3" oninput="updateCard()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-slate-600 font-semibold mb-1 text-[11px]">カード番号</label>
+                            <input type="text" id="input-number" oninput="updateCard()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                    </div>
+
+                    <!-- イラストアップロード -->
+                    <div>
+                        <label class="block text-slate-600 font-semibold mb-1 text-[11px] flex items-center gap-1">
+                            <i class="fa-solid fa-image text-slate-400"></i> カードイラストのアップロード
+                        </label>
+                        <input type="file" id="input-image" accept="image/*" onchange="handleImage(event)" class="w-full text-xs text-slate-500 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 border border-slate-300 rounded-md p-1 bg-slate-50">
+                    </div>
+
+                    <!-- キャプション -->
+                    <div>
+                        <label class="block text-slate-600 font-semibold mb-1 text-[11px]">図の説明（キャプション）</label>
+                        <input type="text" id="input-caption" oninput="updateCard()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <!-- 効果見出し & 効果内容 -->
+                    <div>
+                        <label class="block text-slate-600 font-semibold mb-1 text-[11px]">効果・説明の見出し</label>
+                        <input type="text" id="input-effect-title" oninput="updateCard()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-600 font-semibold mb-1 text-[11px]">効果・説明のテキスト</label>
+                        <textarea id="input-effect" rows="3" oninput="updateCard()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"></textarea>
+                    </div>
+                </div>
+
+                <hr class="border-slate-100">
+
+                <!-- 3. フォント・サイズ変更機能 -->
+                <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 space-y-3">
+                    <h3 class="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+                        <i class="fa-solid fa-font text-indigo-600"></i> フォントカスタマイズ
+                    </h3>
+                    
+                    <!-- タイトル用フォント -->
+                    <div>
+                        <label class="block text-slate-600 font-semibold mb-1 text-[11px]">カード名（上部）のフォント</label>
+                        <select id="select-title-font" onchange="updateCard()" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="'Noto Serif JP', serif">明朝体 (標準・美しい)</option>
+                            <option value="'Noto Sans JP', sans-serif">ゴシック体 (ハッキリ・王道)</option>
+                            <option value="'BIZ UDPGothic', sans-serif">ユニバーサルゴシック (教科書調で見やすい)</option>
+                            <option value="'Zen Maru Gothic', sans-serif">丸ゴシック (優しくポップ)</option>
+                            <option value="'Kiwi Maru', serif">キウイ丸 (手書き風・個性的)</option>
+                        </select>
+                    </div>
+
+                    <!-- 本文用フォント -->
+                    <div>
+                        <label class="block text-slate-600 font-semibold mb-1 text-[11px]">効果・説明テキストのフォント</label>
+                        <select id="select-body-font" onchange="updateCard()" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="'BIZ UDPMincho', serif" selected>UD教科書明朝 (一番おすすめ)</option>
+                            <option value="'Noto Serif JP', serif">標準明朝体 (古書風・重厚)</option>
+                            <option value="'BIZ UDPGothic', sans-serif">UD教科書ゴシック (読みやすさ最優先)</option>
+                            <option value="'Noto Sans JP', sans-serif">標準ゴシック体 (スッキリ・シンプル)</option>
+                            <option value="'Zen Maru Gothic', sans-serif">丸ゴシック (柔らかい解説文風)</option>
+                        </select>
+                    </div>
+
+                    <!-- 文字サイズ調整スライダー -->
+                    <div class="border-t border-indigo-200/60 pt-3 space-y-2.5">
+                        <h4 class="text-[10px] font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1">
+                            <i class="fa-solid fa-up-down-left-right"></i> 文字サイズ微調整
+                        </h4>
+                        
+                        <!-- カード名のサイズ -->
+                        <div>
+                            <div class="flex justify-between text-[10px] text-slate-600 mb-1">
+                                <span>カード名</span>
+                                <span id="val-title-size" class="font-mono font-bold text-indigo-600">20px</span>
+                            </div>
+                            <input type="range" id="input-title-size" min="14" max="28" value="20" oninput="updateCard()" class="w-full h-1 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+                        </div>
+
+                        <!-- 英語名のサイズ -->
+                        <div>
+                            <div class="flex justify-between text-[10px] text-slate-600 mb-1">
+                                <span>英語・学名</span>
+                                <span id="val-sub-size" class="font-mono font-bold text-indigo-600">10px</span>
+                            </div>
+                            <input type="range" id="input-sub-size" min="8" max="16" value="10" oninput="updateCard()" class="w-full h-1 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+                        </div>
+
+                        <!-- 効果本文のサイズ -->
+                        <div>
+                            <div class="flex justify-between text-[10px] text-slate-600 mb-1">
+                                <span>効果・説明テキスト</span>
+                                <span id="val-effect-size" class="font-mono font-bold text-indigo-600">11.5px</span>
+                            </div>
+                            <input type="range" id="input-effect-size" min="9" max="16" step="0.5" value="11.5" oninput="updateCard()" class="w-full h-1 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="border-slate-100">
+
+                <!-- 4. エクスポートボタン -->
+                <div>
+                    <button onclick="downloadCard()" class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold rounded-xl shadow-lg hover:from-amber-600 hover:to-orange-700 transition transform hover:-translate-y-0.5 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-circle-down text-lg"></i>
+                        超高画質PNGとして保存する
+                    </button>
+                    <p class="text-[10px] text-slate-400 mt-2 text-center">
+                        ※保存した高解像度の画像をパワーポイントに貼り付けるだけで、最高のカードが印刷できます。
+                    </p>
+                </div>
+
+            </div>
+
+            <!-- 右側：ライブプレビュー（80%幅） -->
+            <div class="lg:col-span-7 flex flex-col items-center justify-center">
+                <span class="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1">
+                    <i class="fa-solid fa-magnifying-glass"></i> リアルタイム完成見本プレビュー
+                </span>
+
+                <!-- カード本体コンテナ -->
+                <div id="card-preview-area" class="parchment-bg rounded-[24px] border-[14px] p-4 flex flex-col justify-between transition-all duration-300">
+                    
+                    <!-- 背景の透かし模様 -->
+                    <div class="absolute inset-0 opacity-[0.03] scientific-grid pointer-events-none z-0"></div>
+                    <div id="card-watermark" class="absolute bottom-6 right-6 w-36 h-36 opacity-[0.05] pointer-events-none z-0 flex items-center justify-center text-[100px] text-slate-900">
+                        <i class="fa-solid fa-virus"></i>
+                    </div>
+
+                    <!-- 最上段：タイトル・属性バッジヘッダー -->
+                    <div id="header-container" class="w-full h-12 rounded-xl flex items-center justify-between px-3 relative z-10 text-white shadow-md">
+                        <!-- タイトル表記 -->
+                        <div class="flex items-baseline gap-2">
+                            <span id="card-name" class="text-xl font-bold drop-shadow-md">炭疽病菌</span>
+                            <span id="card-sub" class="text-[10px] font-normal opacity-90">Pathogen</span>
+                        </div>
+                        
+                        <!-- 右側：星レアリティ & 属性3Dバッジ -->
+                        <div class="flex items-center gap-2">
+                            <!-- 星マーク -->
+                            <div id="stars-container" class="flex gap-0.5">
+                                <!-- JSで動的生成 -->
+                            </div>
+                            <!-- 属性丸型バッジ -->
+                            <div id="badge-icon" class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold badge-3d">
+                                病
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 中段：イラスト枠 -->
+                    <div class="flex flex-col items-center flex-grow justify-center py-1 relative z-10">
+                        <!-- イラスト表示エリア -->
+                        <div id="image-frame" class="w-[390px] h-[225px] bg-white border border-slate-300 rounded-lg overflow-hidden shadow-inner flex items-center justify-center">
+                            <!-- デフォルトはSVG（JSで挿入） -->
+                        </div>
+                        <!-- キャプション -->
+                        <p id="card-caption" class="text-[9px] text-slate-600 mt-1 font-semibold">図2. 炭疽病菌 (Microscopic view)</p>
+                    </div>
+
+                    <!-- 下段：テキストエリア -->
+                    <div id="text-frame" class="w-full h-[200px] bg-white bg-opacity-95 rounded-xl border p-4 flex flex-col justify-between relative z-10 shadow-sm">
+                        <div>
+                            <!-- テキスト見出し（タグ状） -->
+                            <div id="effect-badge" class="inline-block text-xs font-bold px-2 py-0.5 rounded text-white mb-2 shadow-sm">
+                                【効果】
+                            </div>
+                            <!-- 本文（明朝体） -->
+                            <p id="card-effect" class="text-[11.5px] leading-relaxed text-slate-800 font-medium">
+                                植物カードの上に配置することで「感染」状態にする。
+                            </p>
+                        </div>
+
+                        <!-- フッター部：カード番号 -->
+                        <div class="flex justify-between items-center text-[9px] text-slate-500 font-mono mt-1 border-t pt-1 border-slate-100">
+                            <span>OP-CAMPUS 2026</span>
+                            <span id="card-number">NO. 002/010 - B</span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <p class="text-xs text-slate-400 mt-3 text-center">
+                    ハイクオリティに印刷できるよう、外側の二重線の太さや角丸の滑らかさ、<br>光沢バッジ、用紙の繊維質など、プロ仕様のディテールで出力されます。
+                </p>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- プレビュー用の初期画像データ（仮イラスト代わりのSVG） -->
+    <script>
+        const defaultImages = {
+            pathogen: `<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-32 h-32 opacity-40"><circle cx="50" cy="50" r="20" fill="#800d23" opacity="0.8"/><circle cx="30" cy="40" r="8" fill="#800d23" opacity="0.6"/><circle cx="70" cy="65" r="10" fill="#800d23" opacity="0.6"/><path d="M50 20 L50 10 M30 30 L20 20 M70 45 L80 40" stroke="#800d23" stroke-width="4" stroke-linecap="round"/></svg>`,
+            plant: `<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-32 h-32 opacity-40"><path d="M50 85 C50 85, 30 55, 30 35 C30 20, 50 15, 50 15 C50 15, 70 20, 70 35 C70 55, 50 85, 50 85 Z" fill="#2d6a4f" opacity="0.8"/><path d="M50 85 L50 15" stroke="#fff" stroke-width="3" opacity="0.5"/></svg>`,
+            support: `<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-32 h-32 opacity-40"><circle cx="50" cy="45" r="15" fill="#1e3a8a" opacity="0.8"/><path d="M50 65 L50 85 M40 65 L30 80 M60 65 L70 80" stroke="#1e3a8a" stroke-width="4" stroke-linecap="round"/></svg>`
+        };
+
+        // プリセット用データ
+        const presets = {
+            pathogen: {
+                name: '炭疽病菌',
+                sub: 'Colletotrichum sp.',
+                stars: 4,
+                caption: '図2. 炭疽病菌 (Microscopic view)',
+                effectTitle: '【効果】',
+                effect: '植物カードの上に配置することで「感染」状態にする。毎ターン開始時、感染した植物から生命力を1奪い、自身の増殖エネルギーに変換する。',
+                number: 'NO. 002/010 - B',
+                themeColor: '#800d23', // 深紅（ワインレッド）
+                subColor: '#a62639',
+                watermark: 'fa-virus',
+                badgeText: '病'
+            },
+            plant: {
+                name: 'オリーブ',
+                sub: 'Olea europaea',
+                stars: 3,
+                caption: '図1. オリーブの枝 (Olea europaea)',
+                effectTitle: '【特徴】',
+                effect: '地中海沿岸原産の常緑高木。温暖で乾燥した環境を好み、成長が早い。病気に対する基本耐性が高く、炭疽病に感染しても2ターン間は効果を無効化できる。',
+                number: 'NO. 001/010 - P',
+                themeColor: '#2d6a4f', // フォレストグリーン
+                subColor: '#40916c',
+                watermark: 'fa-leaf',
+                badgeText: '植'
+            },
+            support: {
+                name: '豊かな光と水',
+                sub: 'Light and Water',
+                stars: 5,
+                caption: '図3. 理想的な環境因子 (Environment)',
+                effectTitle: '【役割】',
+                effect: '場に配置することで、すべての植物カードの生命回復力を2倍にする。さらに、病原菌カードの活動（生命力奪取効果）を1ターン遅らせることができる。',
+                number: 'NO. 003/010 - E',
+                themeColor: '#2a6f97', // サイエンスブルー
+                subColor: '#468faf',
+                watermark: 'fa-cloud-sun-rain',
+                badgeText: 'サ'
+            }
+        };
+
+        let currentTheme = 'pathogen';
+
+        // 起動時の初期化
+        window.onload = function() {
+            setPreset('pathogen');
+        }
+
+        // プリセット設定
+        function setPreset(type) {
+            currentTheme = type;
+            const data = presets[type];
+
+            // フォーム値にセット
+            document.getElementById('input-name').value = data.name;
+            document.getElementById('input-sub').value = data.sub;
+            document.getElementById('input-stars').value = data.stars;
+            document.getElementById('input-caption').value = data.caption;
+            document.getElementById('input-effect-title').value = data.effectTitle;
+            document.getElementById('input-effect').value = data.effect;
+            document.getElementById('input-number').value = data.number;
+
+            // デフォルトのイラスト（SVG）を挿入
+            const frame = document.getElementById('image-frame');
+            frame.innerHTML = `<div id="default-svg-container" class="flex items-center justify-center w-full h-full">${defaultImages[type]}</div><img id="card-image" src="" alt="カードイラスト" class="w-full h-full object-contain p-2 hidden">`;
+
+            updateCard();
+        }
+
+        // 画像アップロードのハンドル
+        function handleImage(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const frame = document.getElementById('image-frame');
+                    frame.innerHTML = `<img id="card-image" src="${event.target.result}" alt="カードイラスト" class="w-full h-full object-contain p-2">`;
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // カード描画のアップデート
+        function updateCard() {
+            const data = presets[currentTheme];
+            const name = document.getElementById('input-name').value;
+            const sub = document.getElementById('input-sub').value;
+            const stars = parseInt(document.getElementById('input-stars').value) || 0;
+            const caption = document.getElementById('input-caption').value;
+            const effectTitle = document.getElementById('input-effect-title').value;
+            const effect = document.getElementById('input-effect').value;
+            const number = document.getElementById('input-number').value;
+
+            // フォントの選択値を取得
+            const titleFont = document.getElementById('select-title-font').value;
+            const bodyFont = document.getElementById('select-body-font').value;
+
+            // 文字サイズの取得とスライダー表示の更新
+            const titleSize = document.getElementById('input-title-size').value;
+            const subSize = document.getElementById('input-sub-size').value;
+            const effectSize = document.getElementById('input-effect-size').value;
+
+            document.getElementById('val-title-size').innerText = titleSize + 'px';
+            document.getElementById('val-sub-size').innerText = subSize + 'px';
+            document.getElementById('val-effect-size').innerText = effectSize + 'px';
+
+            // カードの外枠（全体コンテナボーダー）の色更新
+            const container = document.getElementById('card-preview-area');
+            container.style.borderColor = data.themeColor;
+
+            // 各種カラーの反映
+            const header = document.getElementById('header-container');
+            header.style.backgroundColor = data.themeColor;
+
+            const textFrame = document.getElementById('text-frame');
+            textFrame.style.borderColor = data.themeColor;
+
+            const effectBadge = document.getElementById('effect-badge');
+            effectBadge.style.backgroundColor = data.themeColor;
+
+            const badgeIcon = document.getElementById('badge-icon');
+            badgeIcon.style.backgroundColor = data.themeColor;
+            badgeIcon.innerText = data.badgeText;
+
+            // テキストの流し込み
+            document.getElementById('card-name').innerText = name;
+            document.getElementById('card-sub').innerText = sub;
+            document.getElementById('card-caption').innerText = caption;
+            document.getElementById('card-effect').innerText = effect;
+            document.getElementById('card-number').innerText = number;
+            effectBadge.innerText = effectTitle;
+
+            // フォントと文字サイズのリアルタイム適用
+            const cardNameEl = document.getElementById('card-name');
+            const cardSubEl = document.getElementById('card-sub');
+            const cardEffectEl = document.getElementById('card-effect');
+
+            cardNameEl.style.fontFamily = titleFont;
+            cardNameEl.style.fontSize = titleSize + 'px';
+
+            cardSubEl.style.fontSize = subSize + 'px';
+
+            cardEffectEl.style.fontFamily = bodyFont;
+            cardEffectEl.style.fontSize = effectSize + 'px';
+            
+            document.getElementById('card-caption').style.fontFamily = titleFont;
+            document.getElementById('effect-badge').style.fontFamily = titleFont;
+
+            // 星（レア度）の描画
+            const starsContainer = document.getElementById('stars-container');
+            starsContainer.innerHTML = '';
+            for (let i = 0; i < stars; i++) {
+                starsContainer.innerHTML += `<i class="fa-solid fa-star star-3d text-sm"></i>`;
+            }
+
+            // ウォーターマークアイコンの更新
+            const wm = document.getElementById('card-watermark');
+            wm.innerHTML = `<i class="fa-solid ${data.watermark}"></i>`;
+        }
+
+        // カードを高画質PNGとしてダウンロード（html2canvas）
+        function downloadCard() {
+            const cardElement = document.getElementById('card-preview-area');
+            
+            // 高解像度（scale: 3倍）で出力して印刷に対応
+            html2canvas(cardElement, {
+                scale: 3,
+                useCORS: true,
+                backgroundColor: null,
+                logging: false
+            }).then(canvas => {
+                const link = document.createElement('a');
+                const cardName = document.getElementById('input-name').value || 'card';
+                link.download = `${cardName}_card.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
+    </script>
+</body>
+</html>
